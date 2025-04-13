@@ -13,6 +13,8 @@ export KERNEL_TARGET=d3588
 RK_KERNEL_DEFCONFIG_FRAGMENT=
 
 # kernel
+# make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 mrproper
+
 make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 ${KERNEL_TARGET}_defconfig
 make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 -j$JOB
 # make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 dtbs -j$JOB
@@ -20,6 +22,12 @@ make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 -j$JOB
 
 mkdir -p ../tools/
 cp arch/arm64/boot/Image ../tools/
+
+mkdir -p ../rockdev/modules
+find . -name "*.ko" |xargs -i /bin/cp -a {} ../rockdev/modules/
+
+ls -alh ../rockdev/modules/
+md5sum ../rockdev/modules/*.ko
 
 echo "All done! [$?]"
 
