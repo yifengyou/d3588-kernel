@@ -3,19 +3,34 @@
 set -ex
 JOB=`sed -n "N;/processor/p" /proc/cpuinfo|wc -l`
 
-# CROSS_COMPILE_ARM64=aarch64-none-linux-gnu-
-GCC=`realpath ../gcc-arm-10.3-2021.07-x86_64-aarch64-none-linux-gnu`
-CROSS_COMPILE_ARM64=${GCC}/bin/aarch64-none-linux-gnu-
-echo "using gcc: [${CROSS_COMPILE_ARM64}]"
-
+ARCH=`uname -m`
 export KERNEL_TARGET=d3588
-#export RK_KERNEL_DTB=rk-kernel.dtb
-RK_KERNEL_DEFCONFIG_FRAGMENT=
 
-# kernel
+if [ X"${ARCH}" == X"aarch64" ] ; then
+	GCC=""
+	CROSS_COMPILE_ARM64=""
+elif [ X"${ARCH}" == X"x86_64" ] ; then
+	GCC=`realpath ../gcc-arm-10.3-2021.07-x86_64-aarch64-none-linux-gnu`
+	CROSS_COMPILE_ARM64=${GCC}/bin/aarch64-none-linux-gnu-
+	echo "using gcc: [${CROSS_COMPILE_ARM64}]"
+else
+	echo "${ARCH} is not supported now!"
+	exit 1
+fi
+
+
+# clean
 # make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 mrproper
 
+# kernel
+if [ -f .config ] ; then
+	cp -a .config .config-bak
+fi
 make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 ${KERNEL_TARGET}_defconfig
+diff .config .config-bak
+if [ $? -eq 0 ] ; then
+	cp -a .config-bak .config
+fi
 make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 -j$JOB
 # make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 dtbs -j$JOB
 # make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 ${KERNEL_TARGET}.img
