@@ -25,6 +25,9 @@
 
 #define SOUND_NAME_PREFIX	"sound-name-prefix"
 
+#define I2S_CKR			0x8
+#define IS_I2S_TRCM(v)		((v) & GENMASK(29, 28))
+
 static inline struct rk_mdais_dev *to_info(struct snd_soc_dai *dai)
 {
 	return snd_soc_dai_get_drvdata(dai);
@@ -274,6 +277,9 @@ static int rockchip_mdais_dai_probe(struct snd_soc_dai *dai)
 	const char *str;
 	int ret, i = 0;
 
+	if (dai->probed)
+		return 0;
+
 	for (i = 0; i < mdais->num_dais; i++) {
 		child = mdais->dais[i].dai;
 		comp = child->component;
@@ -511,7 +517,7 @@ static int rockchip_mdais_probe(struct platform_device *pdev)
 	struct device_node *node;
 	struct snd_soc_dai_driver *soc_dai;
 	struct rk_dai *dais;
-	unsigned int *map;
+	unsigned int *map, val;
 	int count, mp_count;
 	int ret = 0, i = 0;
 
@@ -571,6 +577,11 @@ static int rockchip_mdais_probe(struct platform_device *pdev)
 		dais[i].dai = rockchip_mdais_find_dai(node);
 		if (!dais[i].dai)
 			return -EPROBE_DEFER;
+
+		if (strstr(dev_driver_string(dais[i].dai->dev), "i2s")) {
+			val = snd_soc_component_read(dais[i].dai->component, I2S_CKR);
+			dais[i].trcm = IS_I2S_TRCM(val);
+		}
 	}
 
 	mdais_parse_daifmt(np, dais, count);
@@ -617,6 +628,12 @@ static int rockchip_mdais_probe(struct platform_device *pdev)
 			goto err_pm_disable;
 	}
 
+	ret = snd_dmaengine_mpcm_register(mdais);
+	if (ret) {
+		dev_err(&pdev->dev, "Could not register PCM\n");
+		goto err_suspend;
+	}
+
 	ret = devm_snd_soc_register_component(&pdev->dev,
 					      &rockchip_mdais_component,
 					      soc_dai, 1);
@@ -624,12 +641,6 @@ static int rockchip_mdais_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(&pdev->dev, "could not register dai: %d\n", ret);
 		goto err_suspend;
-	}
-
-	ret = snd_dmaengine_mpcm_register(mdais);
-	if (ret) {
-		dev_err(&pdev->dev, "Could not register PCM\n");
-		return ret;
 	}
 
 	return 0;

@@ -37,6 +37,10 @@
 
 #include "irq-gic-common.h"
 
+#ifdef CONFIG_ROCKCHIP_AMP
+#include <soc/rockchip/rockchip_amp.h>
+#endif
+
 #define GICD_INT_NMI_PRI	(GICD_INT_DEF_PRI & ~0x80)
 
 #define FLAGS_WORKAROUND_GICR_WAKER_MSM8996	(1ULL << 0)
@@ -217,10 +221,11 @@ static void gic_do_wait_for_rwp(void __iomem *base, u32 bit)
 }
 
 /* Wait for completion of a distributor change */
-static void gic_dist_wait_for_rwp(void)
+void gic_dist_wait_for_rwp(void)
 {
 	gic_do_wait_for_rwp(gic_data.dist_base, GICD_CTLR_RWP);
 }
+EXPORT_SYMBOL_GPL(gic_dist_wait_for_rwp);
 
 /* Wait for completion of a redistributor change */
 static void gic_redist_wait_for_rwp(void)
@@ -368,6 +373,10 @@ static void gic_poke_irq(struct irq_data *d, u32 offset)
 
 static void gic_mask_irq(struct irq_data *d)
 {
+#ifdef CONFIG_ROCKCHIP_AMP
+	if (rockchip_amp_check_amp_irq(gic_irq(d)))
+		return;
+#endif
 	gic_poke_irq(d, GICD_ICENABLER);
 }
 
@@ -388,6 +397,10 @@ static void gic_eoimode1_mask_irq(struct irq_data *d)
 
 static void gic_unmask_irq(struct irq_data *d)
 {
+#ifdef CONFIG_ROCKCHIP_AMP
+	if (rockchip_amp_check_amp_irq(gic_irq(d)))
+		return;
+#endif
 	gic_poke_irq(d, GICD_ISENABLER);
 }
 
@@ -565,6 +578,10 @@ static bool gic_arm64_erratum_2941627_needed(struct irq_data *d)
 
 static void gic_eoi_irq(struct irq_data *d)
 {
+#ifdef CONFIG_ROCKCHIP_AMP
+	if (rockchip_amp_check_amp_irq(gic_irq(d)))
+		return;
+#endif
 	write_gicreg(gic_irq(d), ICC_EOIR1_EL1);
 	isb();
 
@@ -797,7 +814,7 @@ static bool gic_has_group0(void)
 	return val != 0;
 }
 
-static void __init gic_dist_init(void)
+void gic_dist_init(void)
 {
 	unsigned int i;
 	u64 affinity;
@@ -849,12 +866,23 @@ static void __init gic_dist_init(void)
 	 * enabled.
 	 */
 	affinity = gic_mpidr_to_affinity(cpu_logical_map(smp_processor_id()));
-	for (i = 32; i < GIC_LINE_NR; i++)
+	for (i = 32; i < GIC_LINE_NR; i++) {
+#ifdef CONFIG_ROCKCHIP_AMP
+		u64 affinity_amp;
+
+		if (rockchip_amp_need_init_amp_irq(i)) {
+			affinity_amp = rockchip_amp_get_irq_aff(i);
+			gic_write_irouter(affinity_amp, base + GICD_IROUTER + i * 8);
+			continue;
+		}
+#endif
 		gic_write_irouter(affinity, base + GICD_IROUTER + i * 8);
+	}
 
 	for (i = 0; i < GIC_ESPI_NR; i++)
 		gic_write_irouter(affinity, base + GICD_IROUTERnE + i * 8);
 }
+EXPORT_SYMBOL_GPL(gic_dist_init);
 
 static int gic_iterate_rdists(int (*fn)(struct redist_region *, void __iomem *))
 {
@@ -1136,7 +1164,7 @@ static int gic_dist_supports_lpis(void)
 		!gicv3_nolpi);
 }
 
-static void gic_cpu_init(void)
+void gic_cpu_init(void)
 {
 	void __iomem *rbase;
 	int i;
@@ -1163,6 +1191,7 @@ static void gic_cpu_init(void)
 	/* initialise system registers */
 	gic_cpu_sys_reg_init();
 }
+EXPORT_SYMBOL_GPL(gic_cpu_init);
 
 #ifdef CONFIG_SMP
 
@@ -1281,6 +1310,10 @@ static int gic_set_affinity(struct irq_data *d, const struct cpumask *mask_val,
 	int enabled;
 	u64 val;
 
+#ifdef CONFIG_ROCKCHIP_AMP
+	if (rockchip_amp_check_amp_irq(gic_irq(d)))
+		return -EINVAL;
+#endif
 	if (force)
 		cpu = cpumask_first(mask_val);
 	else
@@ -1363,8 +1396,17 @@ void gic_resume(void)
 }
 EXPORT_SYMBOL_GPL(gic_resume);
 
+static int gic_suspend(void)
+{
+	int ret = 0;
+
+	trace_android_vh_gic_suspend(&gic_data, &ret);
+	return ret;
+}
+
 static struct syscore_ops gic_syscore_ops = {
 	.resume = gic_resume,
+	.suspend = gic_suspend,
 };
 
 static void gic_syscore_init(void)
@@ -1375,6 +1417,7 @@ static void gic_syscore_init(void)
 #else
 static inline void gic_syscore_init(void) { }
 void gic_resume(void) { }
+static int gic_suspend(void) { return 0; }
 #endif
 
 
@@ -1880,6 +1923,9 @@ static int __init gic_init_bases(void __iomem *dist_base,
 
 	gic_update_rdist_properties();
 
+#ifdef CONFIG_ROCKCHIP_AMP
+	rockchip_amp_get_gic_info(GIC_LINE_NR, GIC_V3);
+#endif
 	gic_dist_init();
 	gic_cpu_init();
 	gic_smp_init();

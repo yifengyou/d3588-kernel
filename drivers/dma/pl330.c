@@ -1760,7 +1760,7 @@ static void dma_pl330_rqcb(struct dma_pl330_desc *desc, enum pl330_op_err err)
 
 	spin_unlock_irqrestore(&pch->lock, flags);
 
-	tasklet_schedule(&pch->task);
+	tasklet_hi_schedule(&pch->task);
 }
 
 static void pl330_dotask(struct tasklet_struct *t)
@@ -2309,7 +2309,10 @@ static void pl330_tasklet(struct tasklet_struct *t)
 		dmaengine_desc_get_callback(&desc->txd, &cb);
 
 		desc->status = FREE;
+
+		spin_lock(&pch->dmac->pool_lock);
 		list_move_tail(&desc->node, &pch->dmac->desc_pool);
+		spin_unlock(&pch->dmac->pool_lock);
 
 		dma_descriptor_unmap(&desc->txd);
 
@@ -2497,9 +2500,12 @@ static int pl330_terminate_all(struct dma_chan *chan)
 		dma_cookie_complete(&desc->txd);
 	}
 
+	spin_lock(&pl330->pool_lock);
 	list_splice_tail_init(&pch->submitted_list, &pl330->desc_pool);
 	list_splice_tail_init(&pch->work_list, &pl330->desc_pool);
 	list_splice_tail_init(&pch->completed_list, &pl330->desc_pool);
+	spin_unlock(&pl330->pool_lock);
+
 	spin_unlock_irqrestore(&pch->lock, flags);
 	pm_runtime_mark_last_busy(pl330->ddma.dev);
 	if (power_down)
@@ -2555,7 +2561,9 @@ static void pl330_free_chan_resources(struct dma_chan *chan)
 	pl330_release_channel(pch->thread);
 	pch->thread = NULL;
 
+	spin_lock(&pl330->pool_lock);
 	list_splice_tail_init(&pch->work_list, &pch->dmac->desc_pool);
+	spin_unlock(&pl330->pool_lock);
 
 	spin_unlock_irqrestore(&pl330->lock, flags);
 	pm_runtime_mark_last_busy(pch->dmac->ddma.dev);
@@ -2650,6 +2658,13 @@ pl330_tx_status(struct dma_chan *chan, dma_cookie_t cookie,
 			default:
 				WARN_ON(1);
 			}
+			/*
+			 * The infinitely cyclic without CPU intervention
+			 * use the single desc, so, should always return
+			 * DMA_IN_PROGRESS to match its status.
+			 */
+			if (desc->cyclic)
+				ret = DMA_IN_PROGRESS;
 			break;
 		}
 		if (desc->last)
@@ -2946,6 +2961,8 @@ static struct dma_async_tx_descriptor *pl330_prep_interleaved_dma(
 
 #ifdef CONFIG_NO_GKI
 	nump = xt->nump;
+#else
+	nump = xt->sgl[1].size;
 #endif
 	numf = xt->numf;
 	size = xt->sgl[0].size;

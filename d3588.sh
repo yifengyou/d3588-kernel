@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -ex
+set -x
 JOB=`sed -n "N;/processor/p" /proc/cpuinfo|wc -l`
 
 ARCH=`uname -m`
@@ -27,10 +27,19 @@ if [ -f .config ] ; then
 	cp -a .config .config-bak
 fi
 make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 ${KERNEL_TARGET}_defconfig
-diff .config .config-bak
-if [ $? -eq 0 ] ; then
-	cp -a .config-bak .config
+if [ $? -ne 0 ] ; then
+	echo "config failed!"
+	exit 1
 fi
+
+if [ -f .config-bak ] ; then
+	diff .config .config-bak
+	if [ $? -eq 0 ] ; then
+		cp -a .config-bak .config
+	fi
+fi
+
+set -e
 make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 -j$JOB
 # make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 dtbs -j$JOB
 # make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 ${KERNEL_TARGET}.img

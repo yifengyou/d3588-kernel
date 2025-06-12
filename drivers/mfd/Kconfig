@@ -1143,17 +1143,6 @@ config MFD_RK618
 	help
 	  if you say yes here you get support for the RK618 from Rockchip.
 
-config MFD_RK628
-	tristate "Rockchip RK628 MFD Driver"
-	depends on I2C
-	depends on OF
-	select MFD_CORE
-	select REGMAP_I2C
-	select REGMAP_IRQ
-	select PINCTRL_RK628
-	help
-	  if you say yes here you get support for the RK628 from Rockchip.
-
 config MFD_RK630
 	tristate "RK630 CORE module support"
 	select MFD_CORE
@@ -1482,6 +1471,7 @@ config MFD_DAVINCI_VOICECODEC
 
 config MFD_TI_AM335X_TSCADC
 	tristate "TI ADC / Touch Screen chip support"
+	depends on ARCH_OMAP2PLUS || ARCH_K3 || COMPILE_TEST
 	select MFD_CORE
 	select REGMAP
 	select REGMAP_MMIO

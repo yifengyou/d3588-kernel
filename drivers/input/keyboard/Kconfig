@@ -788,4 +788,10 @@ config KEYBOARD_MTK_PMIC
 	  To compile this driver as a module, choose M here: the
 	  module will be called pmic-keys.
 
+config KEYBOARD_ROCKCHIP
+	tristate "Rockchip keyboard support"
+	depends on IIO && ARCH_ROCKCHIP
+	help
+	  RK keyboard drivers(gpio and adc)
+
 endif

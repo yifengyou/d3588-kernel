@@ -57,6 +57,9 @@ struct cdn_dp_port {
 	u8 lanes;
 	bool phy_enabled;
 	u8 id;
+
+	struct gpio_desc *hpd_gpio;
+	int hpd_irq;
 };
 
 struct cdn_dp_device {
@@ -76,6 +79,7 @@ struct cdn_dp_device {
 	bool active;
 	bool suspended;
 	bool use_fw_training;
+	bool registered;
 
 	const struct firmware *fw;	/* cdn dp firmware */
 	unsigned int fw_version;	/* cdn fw version */

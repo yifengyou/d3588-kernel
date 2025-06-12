@@ -156,7 +156,8 @@ static struct snd_soc_dai_driver rk_spdifrx_dai = {
 			  SNDRV_PCM_RATE_192000),
 		.formats = (SNDRV_PCM_FMTBIT_S16_LE |
 			    SNDRV_PCM_FMTBIT_S20_3LE |
-			    SNDRV_PCM_FMTBIT_S24_LE),
+			    SNDRV_PCM_FMTBIT_S24_LE |
+			    SNDRV_PCM_FMTBIT_S32_LE),
 	},
 	.ops = &rk_spdifrx_dai_ops,
 };
@@ -327,17 +328,17 @@ static int rk_spdifrx_probe(struct platform_device *pdev)
 			goto err_pm_runtime;
 	}
 
+	ret = devm_snd_dmaengine_pcm_register(&pdev->dev, NULL, 0);
+	if (ret) {
+		dev_err(&pdev->dev, "Could not register PCM\n");
+		goto err_pm_suspend;
+	}
+
 	ret = devm_snd_soc_register_component(&pdev->dev,
 					      &rk_spdifrx_component,
 					      &rk_spdifrx_dai, 1);
 	if (ret) {
 		dev_err(&pdev->dev, "Could not register DAI\n");
-		goto err_pm_suspend;
-	}
-
-	ret = devm_snd_dmaengine_pcm_register(&pdev->dev, NULL, 0);
-	if (ret) {
-		dev_err(&pdev->dev, "Could not register PCM\n");
 		goto err_pm_suspend;
 	}
 

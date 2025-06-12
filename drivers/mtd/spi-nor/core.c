@@ -970,12 +970,11 @@ static int spi_nor_write_16bit_cr_and_check(struct spi_nor *nor, u8 cr)
 		return ret;
 
 	sr_cr[1] = cr;
+	sr_written = sr_cr[0];
 
 	ret = spi_nor_write_sr(nor, sr_cr, 2);
 	if (ret)
 		return ret;
-
-	sr_written = sr_cr[0];
 
 	ret = spi_nor_read_sr(nor, sr_cr);
 	if (ret)
@@ -1560,7 +1559,7 @@ destroy_erase_cmd_list:
 static int spi_nor_erase(struct mtd_info *mtd, struct erase_info *instr)
 {
 	struct spi_nor *nor = mtd_to_spi_nor(mtd);
-	u32 addr, len;
+	u32 addr, len, target;
 	uint32_t rem;
 	int ret;
 
@@ -1613,11 +1612,21 @@ static int spi_nor_erase(struct mtd_info *mtd, struct erase_info *instr)
 	/* "sector"-at-a-time erase */
 	} else if (spi_nor_has_uniform_erase(nor)) {
 		while (len) {
+#ifdef CONFIG_MTD_SPI_NOR_AUTO_MERGE
+			if (addr < nor->auto_merge_single_chip_size)
+				nor->spimem->spi->cs_gpio = 0;
+			else
+				nor->spimem->spi->cs_gpio = 1;
+			target = addr - nor->spimem->spi->cs_gpio *
+				nor->auto_merge_single_chip_size;
+#else
+			target = addr;
+#endif
 			ret = spi_nor_write_enable(nor);
 			if (ret)
 				goto erase_err;
 
-			ret = spi_nor_erase_sector(nor, addr);
+			ret = spi_nor_erase_sector(nor, target);
 			if (ret)
 				goto erase_err;
 
@@ -2158,29 +2167,75 @@ int spi_nor_sr2_bit2_quad_enable(struct spi_nor *nor)
 }
 
 static const struct spi_nor_manufacturer *manufacturers[] = {
+#ifdef CONFIG_MTD_SPI_NOR_ATMEL
 	&spi_nor_atmel,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_BOYA
 	&spi_nor_boya,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_CATALYST
 	&spi_nor_catalyst,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_DOSILICON
 	&spi_nor_dosilicon,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_EON
 	&spi_nor_eon,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_ESMT
 	&spi_nor_esmt,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_EVERSPIN
 	&spi_nor_everspin,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_FMSH
 	&spi_nor_fmsh,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_FUJITSU
 	&spi_nor_fujitsu,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_GIGADEVICE
 	&spi_nor_gigadevice,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_NORMEM
 	&spi_nor_normem,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_INTEL
 	&spi_nor_intel,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_ISSI
 	&spi_nor_issi,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_MACRONIX
 	&spi_nor_macronix,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_STMICRO
 	&spi_nor_micron,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_PUYA
 	&spi_nor_puya,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_STMICRO
 	&spi_nor_st,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_SPANSION
 	&spi_nor_spansion,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_SST
 	&spi_nor_sst,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_WINBOND
 	&spi_nor_winbond,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_XILINX
 	&spi_nor_xilinx,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_XMC
 	&spi_nor_xmc,
+#endif
+#ifdef CONFIG_MTD_SPI_NOR_XTX
 	&spi_nor_xtx,
+#endif
 };
 
 static const struct flash_info *
@@ -2251,7 +2306,29 @@ static int spi_nor_read(struct mtd_info *mtd, loff_t from, size_t len,
 
 	while (len) {
 		loff_t addr = from;
+#ifdef CONFIG_MTD_SPI_NOR_AUTO_MERGE
+		size_t read_len = len;
 
+		if (addr < nor->auto_merge_single_chip_size &&
+		    (addr + len) > nor->auto_merge_single_chip_size)
+			read_len = nor->auto_merge_single_chip_size - addr;
+		if (addr < nor->auto_merge_single_chip_size)
+			nor->spimem->spi->cs_gpio = 0;
+		else
+			nor->spimem->spi->cs_gpio = 1;
+		addr -= nor->spimem->spi->cs_gpio * nor->auto_merge_single_chip_size;
+		addr = spi_nor_convert_addr(nor, addr);
+		ret = spi_nor_read_data(nor, addr, read_len, buf);
+		if (ret == 0) {
+			/* We shouldn't see 0-length reads */
+			ret = -EIO;
+			goto read_err;
+		}
+		if (ret < 0)
+			goto read_err;
+
+		WARN_ON(ret > read_len);
+#else
 		addr = spi_nor_convert_addr(nor, addr);
 
 		ret = spi_nor_read_data(nor, addr, len, buf);
@@ -2264,6 +2341,7 @@ static int spi_nor_read(struct mtd_info *mtd, loff_t from, size_t len,
 			goto read_err;
 
 		WARN_ON(ret > len);
+#endif
 		*retlen += ret;
 		buf += ret;
 		from += ret;
@@ -2298,6 +2376,13 @@ static int spi_nor_write(struct mtd_info *mtd, loff_t to, size_t len,
 		ssize_t written;
 		loff_t addr = to + i;
 
+#ifdef CONFIG_MTD_SPI_NOR_AUTO_MERGE
+		if (addr < nor->auto_merge_single_chip_size)
+			nor->spimem->spi->cs_gpio = 0;
+		else
+			nor->spimem->spi->cs_gpio = 1;
+		addr -= nor->spimem->spi->cs_gpio * nor->auto_merge_single_chip_size;
+#endif
 		/*
 		 * If page_size is a power of two, the offset can be quickly
 		 * calculated with an AND operation. On the other cases we
@@ -3140,6 +3225,13 @@ static void spi_nor_resume(struct mtd_info *mtd)
 	int ret;
 
 	/* re-initialize the nor chip */
+#ifdef CONFIG_MTD_SPI_NOR_AUTO_MERGE
+	nor->spimem->spi->cs_gpio = 0;
+	ret = spi_nor_init(nor);
+	if (ret)
+		dev_err(dev, "resume() failed\n");
+	nor->spimem->spi->cs_gpio = 1;
+#endif
 	ret = spi_nor_init(nor);
 	if (ret)
 		dev_err(dev, "resume() failed\n");
@@ -3291,6 +3383,9 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 	int ret;
 	int i;
 
+#ifdef CONFIG_MTD_SPI_NOR_AUTO_MERGE
+	nor->spimem->spi->cs_gpio = 0;
+#endif
 	ret = spi_nor_check(nor);
 	if (ret)
 		return ret;
@@ -3435,6 +3530,22 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 				mtd->eraseregions[i].erasesize,
 				mtd->eraseregions[i].erasesize / 1024,
 				mtd->eraseregions[i].numblocks);
+
+#ifdef CONFIG_MTD_SPI_NOR_AUTO_MERGE
+	nor->auto_merge_single_chip_size = nor->params->size;
+	nor->spimem->spi->cs_gpio = 1;
+	if (IS_ERR(spi_nor_read_id(nor))) {
+		dev_info(dev, "spinor enable auto_merge, but only cs0 valid\n");
+		return 0;
+	}
+	ret = spi_nor_init(nor);
+	if (!ret) {
+		mtd->size = mtd->size * 2;
+		nor->params->size = nor->params->size * 2;
+		dev_info(dev, "spinor enable auto_merge\n");
+	}
+#endif
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(spi_nor_scan);

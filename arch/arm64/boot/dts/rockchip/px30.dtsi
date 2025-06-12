@@ -746,6 +746,25 @@
 		status = "disabled";
 	};
 
+	pdm: pdm@ff0a0000 {
+		compatible = "rockchip,px30-pdm";
+		reg = <0x0 0xff0a0000 0x0 0x1000>;
+		clocks = <&cru SCLK_PDM>, <&cru HCLK_PDM>;
+		clock-names = "pdm_clk", "pdm_hclk";
+		dmas = <&dmac 24>;
+		dma-names = "rx";
+		resets = <&cru SRST_PDM>;
+		reset-names = "pdm-m";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pdm_clk0m0
+			     &pdm_clk1
+			     &pdm_sdi0m0
+			     &pdm_sdi1
+			     &pdm_sdi2
+			     &pdm_sdi3>;
+		status = "disabled";
+	};
+
 	crypto: crypto@ff0b0000 {
 		compatible = "rockchip,px30-crypto";
 		reg = <0x0 0xff0b0000 0x0 0x400>, <0x0 0xff0b0480 0x0 0x3B80>;
@@ -1016,6 +1035,7 @@
 		clock-names = "spiclk", "apb_pclk";
 		dmas = <&dmac 12>, <&dmac 13>;
 		dma-names = "tx", "rx";
+		num-cs = <2>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&spi0_clk &spi0_csn &spi0_miso &spi0_mosi>;
 		#address-cells = <1>;
@@ -1031,6 +1051,7 @@
 		clock-names = "spiclk", "apb_pclk";
 		dmas = <&dmac 14>, <&dmac 15>;
 		dma-names = "tx", "rx";
+		num-cs = <2>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&spi1_clk &spi1_csn0 &spi1_csn1 &spi1_miso &spi1_mosi>;
 		#address-cells = <1>;
@@ -1249,13 +1270,23 @@
 			<&pmucru SCLK_WIFI_PMU>, <&cru ARMCLK>,
 			<&cru ACLK_BUS_PRE>, <&cru ACLK_PERI_PRE>,
 			<&cru HCLK_BUS_PRE>, <&cru HCLK_PERI_PRE>,
-			<&cru PCLK_BUS_PRE>, <&cru SCLK_GPU>;
+			<&cru PCLK_BUS_PRE>, <&cru SCLK_GPU>,
+			<&cru SCLK_I2S0_RX_SRC>, <&cru SCLK_I2S0_TX_SRC>,
+			<&cru SCLK_I2S1_SRC>, <&cru SCLK_I2S2_SRC>,
+			<&cru SCLK_PDM_SRC>, <&pmucru SCLK_UART0_PMU_SRC>,
+			<&cru SCLK_UART1_SRC>, <&cru SCLK_UART3_SRC>,
+			<&cru SCLK_UART4_SRC>, <&cru SCLK_UART5_SRC>;
 		assigned-clock-rates =
 			<1200000000>, <100000000>,
 			<26000000>, <600000000>,
 			<200000000>, <200000000>,
 			<150000000>, <150000000>,
-			<100000000>, <200000000>;
+			<100000000>, <200000000>,
+			<600000000>, <600000000>,
+			<600000000>, <600000000>,
+			<600000000>, <600000000>,
+			<600000000>, <600000000>,
+			<600000000>, <600000000>;
 	};
 
 	usb2phy_grf: syscon@ff2c0000 {

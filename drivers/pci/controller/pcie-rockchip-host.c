@@ -381,10 +381,10 @@ static int rockchip_pcie_host_init_port(struct rockchip_pcie *rockchip)
 	}
 
 	err = readl_poll_timeout(rockchip->apb_base + PCIE_CLIENT_DEBUG_OUT_0,
-				 status, PCIE_LINK_IS_L0(status), 20,
-				 timeouts * USEC_PER_MSEC);
+				 status, PCIE_LINK_IS_L0(status) || PCIE_LINK_IS_L1(status),
+				 20, timeouts * USEC_PER_MSEC);
 	if (err) {
-		dev_err(dev, "LTSSM is not L0!\n");
+		dev_err(dev, "LTSSM 0x%x is not in L0 or L1!\n", status);
 		return -ETIMEDOUT;
 	}
 

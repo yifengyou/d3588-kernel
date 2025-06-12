@@ -72,12 +72,22 @@
 		#size-cells = <2>;
 		ranges;
 
+	#if (HDMIRX_ENABLE == 0)
 		cma {
 			compatible = "shared-dma-pool";
 			reusable;
 			size = <0x0 (8 * 0x100000)>;
 			linux,cma-default;
 		};
+	#else
+		/* Reserve 128MB memory for hdmirx-controller@fdee0000 */
+		cma {
+			compatible = "shared-dma-pool";
+			reusable;
+			reg = <0x0 (256 * 0x100000) 0x0 (128 * 0x100000)>;
+			linux,cma-default;
+		};
+	#endif
 
 		drm_logo: drm-logo@00000000 {
 			compatible = "rockchip,drm-logo";
