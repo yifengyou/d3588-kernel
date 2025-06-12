@@ -27,10 +27,13 @@ if [ -f .config ] ; then
 	cp -a .config .config-bak
 fi
 make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 ${KERNEL_TARGET}_defconfig
-diff .config .config-bak
-if [ $? -eq 0 ] ; then
-	cp -a .config-bak .config
+if [ -f .config-bak ] ; then
+	diff .config .config-bak
+	if [ $? -eq 0 ] ; then
+		cp -a .config-bak .config
+	fi
 fi
+
 make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 -j$JOB
 # make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 dtbs -j$JOB
 # make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE_ARM64 ${KERNEL_TARGET}.img
